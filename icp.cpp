@@ -50,34 +50,60 @@ std::vector<Eigen::Vector3d> computeMeanRemovedPoints(const pcl::PointCloud<pcl:
     return mean_removed_points;
 }
 
+// 使用最小二乘法计算平移向量
+Eigen::Vector3d computeTranslation(const std::vector<Eigen::Vector3d>& mean_removed_points) {
+    Eigen::Vector3d translation_vector = Eigen::Vector3d::Zero();
+    
+    // 如果点对的数量小于3，无法估计平移向量，返回零向量
+    if (mean_removed_points.size() < 3) {
+        return translation_vector;
+    }
+
+    Eigen::Matrix<double, Eigen::Dynamic, 3> A(mean_removed_points.size(), 3);
+    Eigen::Matrix<double, Eigen::Dynamic, 1> B(mean_removed_points.size());
+
+    // 填充矩阵 A 和向量 B
+    for (size_t i = 0; i < mean_removed_points.size(); ++i) {
+        A.row(i) = mean_removed_points[i].transpose();
+        B(i) = -mean_removed_points[i].squaredNorm();
+    }
+
+    // 使用最小二乘法求解线性系统 Ax = B
+    Eigen::Vector3d x = A.colPivHouseholderQr().solve(B);
+
+    // 估计的平移向量为 x
+    translation_vector = x;
+
+    return translation_vector;
+}
+
 // 使用SVD计算变换矩阵
 TransformationMatrix computeTransformation(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const std::vector<int>& correspondences) {
     // 步骤1：计算均值移除后的点对列表
     std::vector<Eigen::Vector3d> mean_removed_points = computeMeanRemovedPoints(src_cloud, tar_cloud, correspondences);
 
-    // 步骤2：计算协方差矩阵
+    // 步骤2：计算平移向量
+    Eigen::Vector3d translation_vector = computeTranslation(mean_removed_points);
+
+    // 步骤3：计算协方差矩阵
     Eigen::Matrix3d covariance_matrix = Eigen::Matrix3d::Zero();
     for (const Eigen::Vector3d& point : mean_removed_points) {
         covariance_matrix += point * point.transpose();
     }
     covariance_matrix /= mean_removed_points.size();
 
-    // 步骤3：SVD分解协方差矩阵
+    // 步骤4：SVD分解协方差矩阵
     Eigen::JacobiSVD<Eigen::Matrix3d> svd(covariance_matrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
     Eigen::Matrix3d rotation_matrix = svd.matrixU() * svd.matrixV().transpose();
 
-    // 步骤4：构建变换矩阵
+    // 步骤5：构建变换矩阵
     TransformationMatrix transformation = TransformationMatrix::Identity();
-    transformation.block<3,3>(0,0) = rotation_matrix;
-    // 步骤4（续）：添加平移部分到变换矩阵
-    Eigen::Vector3d translation_vector = Eigen::Vector3d::Zero();
-    for (const Eigen::Vector3d& point : mean_removed_points) {
-        translation_vector += point;
-    }
-    translation_vector /= mean_removed_points.size();
-    transformation.block(0, 3, 3, 1) = translation_vector;
+    transformation.block<3, 3>(0, 0) = rotation_matrix;
+    transformation.block<3, 1>(0, 3) = translation_vector; // 添加平移部分到变换矩阵
+
     return transformation;
 }
+
 
 Eigen::Matrix4d icp_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, Eigen::Matrix4d init_guess) {
     // This is an example of using pcl::IterativeClosestPoint to align two point clouds
