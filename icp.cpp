@@ -46,13 +46,40 @@ void findCorrespondences(const PointCloudPCL::Ptr source, const PointCloudPCL::P
 
 // 计算变换矩阵
 Eigen::Matrix4d computeTransformation(const PointCloudPCL::Ptr source, const PointCloudPCL::Ptr target, const std::vector<int>& correspondences) {
-    // 在这里，你需要根据对应关系计算变换矩阵
-    // 你可以使用SVD等方法来估计变换矩阵
-    // 这里只是示例，实际中需要更复杂的计算
+    // 创建源点云和目标点云的中心化版本
+    Eigen::Matrix<double, 3, Eigen::Dynamic> centered_source(3, correspondences.size());
+    Eigen::Matrix<double, 3, Eigen::Dynamic> centered_target(3, correspondences.size());
 
-    Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
+    // 填充中心化点云矩阵
+    for (size_t i = 0; i < correspondences.size(); ++i) {
+        int index = correspondences[i];
+        centered_source.col(i) << source->points[index].x, source->points[index].y, source->points[index].z;
+        centered_target.col(i) << target->points[index].x, target->points[index].y, target->points[index].z;
+    }
 
-    return transformation;
+    // 计算质心
+    Eigen::Vector3d source_centroid = centered_source.rowwise().mean();
+    Eigen::Vector3d target_centroid = centered_target.rowwise().mean();
+
+    // 中心化点云
+    centered_source.colwise() -= source_centroid;
+    centered_target.colwise() -= target_centroid;
+
+    // 计算协方差矩阵
+    Eigen::Matrix3d covariance_matrix = centered_source * centered_target.transpose();
+
+    // 执行SVD
+    Eigen::JacobiSVD<Eigen::Matrix3d> svd(covariance_matrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
+
+    // 构建估计的变换矩阵
+    Eigen::Matrix3d rotation_matrix = svd.matrixU() * svd.matrixV().transpose();
+    Eigen::Vector3d translation_vector = target_centroid - rotation_matrix * source_centroid;
+
+    Eigen::Matrix4d estimated_transformation = Eigen::Matrix4d::Identity();
+    estimated_transformation.block<3, 3>(0, 0) = rotation_matrix;
+    estimated_transformation.block<3, 1>(0, 3) = translation_vector;
+
+    return estimated_transformation;
 }
 
 // 主要ICP函数
