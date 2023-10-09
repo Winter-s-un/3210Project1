@@ -10,11 +10,7 @@
 #include <vector>
 #include <cmath>
 
-//Eigen::Matrix4d true_transformation;
-//true_transformation << 0.981995, 0.188913, -0.00021171, -0.920981,
-//                      -0.188913, 0.981996, 0.00015824, 0.160313,
-//                      0.000237872, -0.000115197, 1, 0.0013342,
-//                       0, 0, 0, 1;
+
 
 typedef pcl::KdTreeFLANN<pcl::PointXYZ> KDTree;
 
@@ -72,15 +68,14 @@ TransformationMatrix computeTransformation(const pcl::PointCloud<pcl::PointXYZ>:
 
     // 步骤4：构建变换矩阵
     TransformationMatrix transformation = TransformationMatrix::Identity();
-    transformation.block(0, 0, 3, 3) = rotation_matrix;
+    transformation.block<3,3>(0,0) = rotation_matrix;
     // 步骤4（续）：添加平移部分到变换矩阵
-Eigen::Vector3d translation_vector = Eigen::Vector3d::Zero();
-for (const Eigen::Vector3d& point : mean_removed_points) {
-    translation_vector += point;
-}
-translation_vector /= mean_removed_points.size();
-transformation.block(0, 3, 3, 1) = translation_vector;
-
+    Eigen::Vector3d translation_vector = Eigen::Vector3d::Zero();
+    for (const Eigen::Vector3d& point : mean_removed_points) {
+        translation_vector += point;
+    }
+    translation_vector /= mean_removed_points.size();
+    transformation.block(0, 3, 3, 1) = translation_vector;
     return transformation;
 }
 
@@ -102,31 +97,35 @@ Eigen::Matrix4d icp_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, 
 
     Eigen::Matrix4d transformation = icp.getFinalTransformation().cast<double>();
     return transformation;*/
-    Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
+    
     int iteration = 0;
-
+    Eigen::Matrix4d true_transformation;
+    true_transformation << 0.981995, 0.188913, -0.00021171, -0.920981,
+                      -0.188913, 0.981996, 0.00015824, 0.160313,
+                      0.000237872, -0.000115197, 1, 0.0013342,
+                      0, 0, 0, 1;
     KDTree kdtree;
     kdtree.setInputCloud(tar_cloud);
+    Eigen::Matrix4d transformation;
+
+    transformation = init_guess;
 
     while (iteration < params::max_iterations) {
-        std::vector<int> correspondences;
         
+        std::vector<int> correspondences;
         // 在迭代过程中应用真实变换矩阵
         pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_src_cloud(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::transformPointCloud(*src_cloud, *transformed_src_cloud, true_transformation);
         findCorrespondences(src_cloud, tar_cloud, correspondences, kdtree);
-
+        
         // 计算变换矩阵
         Eigen::Matrix4d delta_transformation = computeTransformation(src_cloud, tar_cloud, correspondences);
 
         // 更新变换矩阵
         transformation = delta_transformation * transformation;
-        
+
         // 计算变换矩阵的变化量
         double transformation_change = (delta_transformation - Eigen::Matrix4d::Identity()).norm();
-
-
-
 
         // 收敛检查：如果变换矩阵的变化量小于收敛阈值，退出迭代
         if (transformation_change < 1e-6) {
