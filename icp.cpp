@@ -73,7 +73,13 @@ TransformationMatrix computeTransformation(const pcl::PointCloud<pcl::PointXYZ>:
     // 步骤4：构建变换矩阵
     TransformationMatrix transformation = TransformationMatrix::Identity();
     transformation.block(0, 0, 3, 3) = rotation_matrix;
-    // 如果需要，还可以添加平移部分
+    // 步骤4（续）：添加平移部分到变换矩阵
+Eigen::Vector3d translation_vector = Eigen::Vector3d::Zero();
+for (const Eigen::Vector3d& point : mean_removed_points) {
+    translation_vector += point;
+}
+translation_vector /= mean_removed_points.size();
+transformation.block(0, 3, 3, 1) = translation_vector;
 
     return transformation;
 }
