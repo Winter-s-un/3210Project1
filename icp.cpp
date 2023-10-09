@@ -47,8 +47,6 @@ void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::Poi
 
 
 // 计算变换矩阵
-#include <Eigen/Dense>
-
 Eigen::Matrix4d computeTransformation(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud,
                                       pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud,
                                       const std::vector<int>& correspondences) {
@@ -83,7 +81,14 @@ Eigen::Matrix4d computeTransformation(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cl
 
     // 使用奇异值分解 (SVD) 计算旋转矩阵 R
     Eigen::JacobiSVD<Eigen::Matrix3d> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Eigen::Matrix3d R = svd.matrixU() * svd.matrixV().transpose();
+    Eigen::Matrix3d R = svd.matrixU() * (svd.matrixV().transpose());
+
+    // 如果矩阵 R 的行列式小于零，需要进行修正
+    if (R.determinant() < 0) {
+        Eigen::Matrix3d V = svd.matrixV();
+        V.col(2) *= -1; // 反转最后一列
+        R = svd.matrixU() * V.transpose();
+    }
 
     // 计算平移矩阵 t
     Eigen::Vector3d t = tar_centroid.head(3) - R * src_centroid.head(3);
