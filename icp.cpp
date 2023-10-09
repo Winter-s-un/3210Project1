@@ -46,59 +46,53 @@ void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::Poi
 
 
 
-// 计算变换矩阵
-Eigen::Matrix4d computeTransformation(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud,
-                                      pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud,
-                                      const std::vector<int>& correspondences) {
-    Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
 
-    // 计算源点云和目标点云的质心
-    Eigen::Vector4d src_centroid(0.0, 0.0, 0.0, 0.0);
-    Eigen::Vector4d tar_centroid(0.0, 0.0, 0.0, 0.0);
+// 使用Eigen库的Matrix4d定义变换矩阵
+typedef Eigen::Matrix4d TransformationMatrix;
 
-    for (int idx : correspondences) {
-        src_centroid += src_cloud->at(idx).getVector4fMap();
-        tar_centroid += tar_cloud->at(idx).getVector4fMap();
-    }
-
-    src_centroid /= correspondences.size();
-    tar_centroid /= correspondences.size();
-
-    // 计算中心化后的点云
-    Eigen::Matrix3Xd centered_src(3, correspondences.size());
-    Eigen::Matrix3Xd centered_tar(3, correspondences.size());
+// 计算均值移除后的点对列表
+std::vector<Eigen::Vector3d> computeMeanRemovedPoints(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const std::vector<int>& correspondences) {
+    std::vector<Eigen::Vector3d> mean_removed_points;
 
     for (size_t i = 0; i < correspondences.size(); ++i) {
-        pcl::PointXYZ& src_point = src_cloud->at(correspondences[i]);
-        pcl::PointXYZ& tar_point = tar_cloud->at(correspondences[i]);
+        pcl::PointXYZ src_point = src_cloud->points[i];
+        pcl::PointXYZ tar_point = tar_cloud->points[correspondences[i]];
 
-        centered_src.col(i) = src_point.getVector3fMap().head(3) - src_centroid.head(3);
-        centered_tar.col(i) = tar_point.getVector3fMap().head(3) - tar_centroid.head(3);
+        Eigen::Vector3d mean_removed_point;
+        mean_removed_point(0) = src_point.x - tar_point.x;
+        mean_removed_point(1) = src_point.y - tar_point.y;
+        mean_removed_point(2) = src_point.z - tar_point.z;
+
+        mean_removed_points.push_back(mean_removed_point);
     }
 
-    // 计算协方差矩阵 H
-    Eigen::Matrix3d H = centered_src * centered_tar.transpose();
+    return mean_removed_points;
+}
 
-    // 使用奇异值分解 (SVD) 计算旋转矩阵 R
-    Eigen::JacobiSVD<Eigen::Matrix3d> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Eigen::Matrix3d R = svd.matrixU() * (svd.matrixV().transpose());
+// 使用SVD计算变换矩阵
+TransformationMatrix computeTransformation(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const std::vector<int>& correspondences) {
+    // 步骤1：计算均值移除后的点对列表
+    std::vector<Eigen::Vector3d> mean_removed_points = computeMeanRemovedPoints(src_cloud, tar_cloud, correspondences);
 
-    // 如果矩阵 R 的行列式小于零，需要进行修正
-    if (R.determinant() < 0) {
-        Eigen::Matrix3d V = svd.matrixV();
-        V.col(2) *= -1; // 反转最后一列
-        R = svd.matrixU() * V.transpose();
+    // 步骤2：计算协方差矩阵
+    Eigen::Matrix3d covariance_matrix = Eigen::Matrix3d::Zero();
+    for (const Eigen::Vector3d& point : mean_removed_points) {
+        covariance_matrix += point * point.transpose();
     }
+    covariance_matrix /= mean_removed_points.size();
 
-    // 计算平移矩阵 t
-    Eigen::Vector3d t = tar_centroid.head(3) - R * src_centroid.head(3);
+    // 步骤3：SVD分解协方差矩阵
+    Eigen::JacobiSVD<Eigen::Matrix3d> svd(covariance_matrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    Eigen::Matrix3d rotation_matrix = svd.matrixU() * svd.matrixV().transpose();
 
-    // 构建最终的变换矩阵
-    transformation.block<3, 3>(0, 0) = R;
-    transformation.block<3, 1>(0, 3) = t;
-    
+    // 步骤4：构建变换矩阵
+    TransformationMatrix transformation = TransformationMatrix::Identity();
+    transformation.block(0, 0, 3, 3) = rotation_matrix;
+    // 如果需要，还可以添加平移部分
+
     return transformation;
 }
+
 
 
 // 主要ICP函数
