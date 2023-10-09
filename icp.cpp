@@ -104,6 +104,10 @@ Eigen::Matrix4d icp_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, 
 
     while (iteration < params::max_iterations) {
         std::vector<int> correspondences;
+        
+        // 在迭代过程中应用真实变换矩阵
+        pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_src_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::transformPointCloud(*src_cloud, *transformed_src_cloud, true_transformation);
         findCorrespondences(src_cloud, tar_cloud, correspondences, kdtree);
 
         // 计算变换矩阵
@@ -114,6 +118,9 @@ Eigen::Matrix4d icp_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, 
         
         // 计算变换矩阵的变化量
         double transformation_change = (delta_transformation - Eigen::Matrix4d::Identity()).norm();
+
+
+
 
         // 收敛检查：如果变换矩阵的变化量小于收敛阈值，退出迭代
         if (transformation_change < 1e-6) {
