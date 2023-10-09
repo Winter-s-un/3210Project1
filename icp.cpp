@@ -31,19 +31,19 @@ true_transformation << 0.981995, 0.188913, -0.00021171, -0.920981,
 typedef pcl::KdTreeFLANN<PointPCL> KDTree;
 
 // 寻找最近邻点对应关系
-void findCorrespondences(const PointCloudPCL::Ptr source, const PointCloudPCL::Ptr target, std::vector<int>& correspondences, KDTree& kdtree) {
-    pcl::Correspondences all_correspondences;
-    pcl::registration::CorrespondenceEstimation<PointPCL, PointPCL> est;
-    est.setInputSource(source);
-    est.setInputTarget(target);
-    est.determineReciprocalCorrespondences(all_correspondences);
+void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree) {
+    for (const pcl::PointXYZ& src_point : *src_cloud) {
+        std::vector<int> indices(1);
+        std::vector<float> distances(1);
 
-    correspondences.clear();
-    correspondences.reserve(all_correspondences.size());
-    for (const auto& corr : all_correspondences) {
-        correspondences.push_back(corr.index_query);
+        // 使用KD树查找最近邻点的索引
+        kdtree.nearestKSearch(src_point, 1, indices, distances);
+
+        // 添加最近邻点的索引到correspondences数组
+        correspondences.push_back(indices[0]);
     }
 }
+
 
 
 // 计算变换矩阵
