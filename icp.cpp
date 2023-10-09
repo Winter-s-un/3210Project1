@@ -1,36 +1,23 @@
-#include <iostream>
+/**
+** Created by Zhijian QIAO.
+** UAV Group, Hong Kong University of Science and Technology
+** email: zqiaoac@connect.ust.hk
+**/
+#include "icp.h"
+#include <pcl/registration/icp.h>
+#include <pcl/kdtree/kdtree_flann.h> //include Kdtree header
+#include "parameters.h"
 #include <vector>
 #include <cmath>
-#include <Eigen/Dense>
-#include <pcl/kdtree/kdtree_flann.h>
 
-// 定义点类型
-struct Point {
-    double x, y, z;
-};
+//Eigen::Matrix4d true_transformation;
+//true_transformation << 0.981995, 0.188913, -0.00021171, -0.920981,
+//                      -0.188913, 0.981996, 0.00015824, 0.160313,
+//                      0.000237872, -0.000115197, 1, 0.0013342,
+//                       0, 0, 0, 1;
 
-// 定义点云类型
-typedef std::vector<Point> PointCloud;
+typedef pcl::KdTreeFLANN<pcl::PointXYZ> KDTree;
 
-// 使用PCL定义的点云类型
-typedef pcl::PointXYZ PointPCL;
-typedef pcl::PointCloud<PointPCL> PointCloudPCL;
-
-// 创建示例点云数据
-PointCloud source_cloud, target_cloud;
-// 在实际应用中，你需要从文件或传感器中读取点云数据
-
-// 定义真实的变换矩阵
-Eigen::Matrix4d true_transformation;
-true_transformation << 0.981995, 0.188913, -0.00021171, -0.920981,
-                      -0.188913, 0.981996, 0.00015824, 0.160313,
-                       0.000237872, -0.000115197, 1, 0.0013342,
-                       0, 0, 0, 1;
-
-// 定义KD树类型
-typedef pcl::KdTreeFLANN<PointPCL> KDTree;
-
-// 寻找最近邻点对应关系
 void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree) {
     for (const pcl::PointXYZ& src_point : *src_cloud) {
         std::vector<int> indices(1);
@@ -43,8 +30,6 @@ void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::Poi
         correspondences.push_back(indices[0]);
     }
 }
-
-
 
 
 // 使用Eigen库的Matrix4d定义变换矩阵
@@ -93,33 +78,48 @@ TransformationMatrix computeTransformation(const pcl::PointCloud<pcl::PointXYZ>:
     return transformation;
 }
 
+Eigen::Matrix4d icp_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, Eigen::Matrix4d init_guess) {
+    // This is an example of using pcl::IterativeClosestPoint to align two point clouds
+    // In your project, you should implement your own ICP algorithm!!!
+    // In your implementation, you can use KDTree in PCL library to find nearest neighbors
+    // Use chatGPT, google and github to learn how to use PCL library and implement ICP. But do not copy totally. TA will check your code using advanced tools.
+    // If you use other's code, you should add a reference in your report. https://registry.hkust.edu.hk/resource-library/academic-integrity
+    /*
+    pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+    icp.setInputSource(src_cloud);
+    icp.setInputTarget(tar_cloud);
+    icp.setMaximumIterations(params::max_iterations);  // set maximum iteration
+    icp.setTransformationEpsilon(1e-6);  // set transformation epsilon
+    icp.setMaxCorrespondenceDistance(params::max_distance);  // set maximum correspondence distance
+    pcl::PointCloud<pcl::PointXYZ> aligned_cloud;
+    icp.align(aligned_cloud, init_guess.cast<float>());
 
-
-// 主要ICP函数
-Eigen::Matrix4d icp(const PointCloudPCL::Ptr source, const PointCloudPCL::Ptr target, int max_iterations = 100, double convergence_threshold = 1e-6) {
+    Eigen::Matrix4d transformation = icp.getFinalTransformation().cast<double>();
+    return transformation;*/
     Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
     int iteration = 0;
 
     KDTree kdtree;
-    kdtree.setInputCloud(target);
+    kdtree.setInputCloud(tar_cloud);
 
-    while (iteration < max_iterations) {
+    while (iteration < params::max_iterations) {
         std::vector<int> correspondences;
-        findCorrespondences(source, target, correspondences, kdtree);
+        findCorrespondences(src_cloud, tar_cloud, correspondences, kdtree);
 
         // 计算变换矩阵
-        Eigen::Matrix4d delta_transformation = computeTransformation(source, target, correspondences);
+        Eigen::Matrix4d delta_transformation = computeTransformation(src_cloud, tar_cloud, correspondences);
 
         // 更新变换矩阵
         transformation = delta_transformation * transformation;
-
+        
         // 计算变换矩阵的变化量
         double transformation_change = (delta_transformation - Eigen::Matrix4d::Identity()).norm();
 
         // 收敛检查：如果变换矩阵的变化量小于收敛阈值，退出迭代
-        if (transformation_change < convergence_threshold) {
+        if (transformation_change < 1e-6) {
             break;
         }
+
 
         iteration++;
     }
@@ -127,17 +127,3 @@ Eigen::Matrix4d icp(const PointCloudPCL::Ptr source, const PointCloudPCL::Ptr ta
     return transformation;
 }
 
-
-int main() {
-    // 初始化PCL点云
-    PointCloudPCL::Ptr source_cloud_pcl = createPCLPointCloud(source_cloud);
-    PointCloudPCL::Ptr target_cloud_pcl = createPCLPointCloud(target_cloud);
-
-    // 执行ICP配准
-    Eigen::Matrix4d estimated_transform = icp(source_cloud_pcl, target_cloud_pcl);
-
-    // 输出估计的变换矩阵
-    std::cout << "Estimated Transformation Matrix:" << std::endl << estimated_transform << std::endl;
-
-    return 0;
-}
