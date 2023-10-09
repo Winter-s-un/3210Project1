@@ -32,17 +32,19 @@ typedef pcl::KdTreeFLANN<PointPCL> KDTree;
 
 // 寻找最近邻点对应关系
 void findCorrespondences(const PointCloudPCL::Ptr source, const PointCloudPCL::Ptr target, std::vector<int>& correspondences, KDTree& kdtree) {
-    for (const PointPCL& source_point : *source) {
-        std::vector<int> indices(1);
-        std::vector<float> distances(1);
+    pcl::Correspondences all_correspondences;
+    pcl::registration::CorrespondenceEstimation<PointPCL, PointPCL> est;
+    est.setInputSource(source);
+    est.setInputTarget(target);
+    est.determineReciprocalCorrespondences(all_correspondences);
 
-        // 使用KD树查找最近邻点的索引
-        kdtree.nearestKSearch(source_point, 1, indices, distances);
-
-        // 添加最近邻点的索引到correspondences数组
-        correspondences.push_back(indices[0]);
+    correspondences.clear();
+    correspondences.reserve(all_correspondences.size());
+    for (const auto& corr : all_correspondences) {
+        correspondences.push_back(corr.index_query);
     }
 }
+
 
 // 计算变换矩阵
 Eigen::Matrix4d computeTransformation(const PointCloudPCL::Ptr source, const PointCloudPCL::Ptr target, const std::vector<int>& correspondences) {
