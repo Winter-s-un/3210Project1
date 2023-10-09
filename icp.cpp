@@ -100,13 +100,20 @@ Eigen::Matrix4d icp(const PointCloudPCL::Ptr source, const PointCloudPCL::Ptr ta
         // 更新变换矩阵
         transformation = delta_transformation * transformation;
 
-        // 这里可以添加收敛检查，根据需要更改迭代条件
+        // 计算变换矩阵的变化量
+        double transformation_change = (delta_transformation - Eigen::Matrix4d::Identity()).norm();
+
+        // 收敛检查：如果变换矩阵的变化量小于收敛阈值，退出迭代
+        if (transformation_change < convergence_threshold) {
+            break;
+        }
 
         iteration++;
     }
 
     return transformation;
 }
+
 
 int main() {
     // 初始化PCL点云
