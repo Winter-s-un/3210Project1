@@ -47,42 +47,54 @@ void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::Poi
 
 
 // 计算变换矩阵
-Eigen::Matrix4d computeTransformation(const PointCloudPCL::Ptr source, const PointCloudPCL::Ptr target, const std::vector<int>& correspondences) {
-    // 创建源点云和目标点云的中心化版本
-    Eigen::Matrix<double, 3, Eigen::Dynamic> centered_source(3, correspondences.size());
-    Eigen::Matrix<double, 3, Eigen::Dynamic> centered_target(3, correspondences.size());
+#include <Eigen/Dense>
 
-    // 填充中心化点云矩阵
-    for (size_t i = 0; i < correspondences.size(); ++i) {
-        int index = correspondences[i];
-        centered_source.col(i) << source->points[index].x, source->points[index].y, source->points[index].z;
-        centered_target.col(i) << target->points[index].x, target->points[index].y, target->points[index].z;
+Eigen::Matrix4d computeTransformation(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud,
+                                      pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud,
+                                      const std::vector<int>& correspondences) {
+    Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
+
+    // 计算源点云和目标点云的质心
+    Eigen::Vector4d src_centroid(0.0, 0.0, 0.0, 0.0);
+    Eigen::Vector4d tar_centroid(0.0, 0.0, 0.0, 0.0);
+
+    for (int idx : correspondences) {
+        src_centroid += src_cloud->at(idx).getVector4fMap();
+        tar_centroid += tar_cloud->at(idx).getVector4fMap();
     }
 
-    // 计算质心
-    Eigen::Vector3d source_centroid = centered_source.rowwise().mean();
-    Eigen::Vector3d target_centroid = centered_target.rowwise().mean();
+    src_centroid /= correspondences.size();
+    tar_centroid /= correspondences.size();
 
-    // 中心化点云
-    centered_source.colwise() -= source_centroid;
-    centered_target.colwise() -= target_centroid;
+    // 计算中心化后的点云
+    Eigen::Matrix3Xd centered_src(3, correspondences.size());
+    Eigen::Matrix3Xd centered_tar(3, correspondences.size());
 
-    // 计算协方差矩阵
-    Eigen::Matrix3d covariance_matrix = centered_source * centered_target.transpose();
+    for (size_t i = 0; i < correspondences.size(); ++i) {
+        pcl::PointXYZ& src_point = src_cloud->at(correspondences[i]);
+        pcl::PointXYZ& tar_point = tar_cloud->at(correspondences[i]);
 
-    // 执行SVD
-    Eigen::JacobiSVD<Eigen::Matrix3d> svd(covariance_matrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
+        centered_src.col(i) = src_point.getVector3fMap().head(3) - src_centroid.head(3);
+        centered_tar.col(i) = tar_point.getVector3fMap().head(3) - tar_centroid.head(3);
+    }
 
-    // 构建估计的变换矩阵
-    Eigen::Matrix3d rotation_matrix = svd.matrixU() * svd.matrixV().transpose();
-    Eigen::Vector3d translation_vector = target_centroid - rotation_matrix * source_centroid;
+    // 计算协方差矩阵 H
+    Eigen::Matrix3d H = centered_src * centered_tar.transpose();
 
-    Eigen::Matrix4d estimated_transformation = Eigen::Matrix4d::Identity();
-    estimated_transformation.block<3, 3>(0, 0) = rotation_matrix;
-    estimated_transformation.block<3, 1>(0, 3) = translation_vector;
+    // 使用奇异值分解 (SVD) 计算旋转矩阵 R
+    Eigen::JacobiSVD<Eigen::Matrix3d> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    Eigen::Matrix3d R = svd.matrixU() * svd.matrixV().transpose();
 
-    return estimated_transformation;
+    // 计算平移矩阵 t
+    Eigen::Vector3d t = tar_centroid.head(3) - R * src_centroid.head(3);
+
+    // 构建最终的变换矩阵
+    transformation.block<3, 3>(0, 0) = R;
+    transformation.block<3, 1>(0, 3) = t;
+    
+    return transformation;
 }
+
 
 // 主要ICP函数
 Eigen::Matrix4d icp(const PointCloudPCL::Ptr source, const PointCloudPCL::Ptr target, int max_iterations = 100, double convergence_threshold = 1e-6) {
