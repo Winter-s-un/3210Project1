@@ -72,7 +72,11 @@ TransformationMatrix computeTransformation(const PointCloud::Ptr src_cloud, cons
         tar_point.x -= tar_centroid.x();
         tar_point.y -= tar_centroid.y();
 
-        covariance_matrix += src_point.getVector2fMap() * tar_point.getVector2fMap().transpose();
+        
+    Eigen::Vector2d src_vec(src_point.x, src_point.y);
+    Eigen::Vector2d tar_vec(tar_point.x, tar_point.y);
+
+    covariance_matrix += src_vec * tar_vec.transpose();
     }
 
     covariance_matrix /= num_correspondences;
