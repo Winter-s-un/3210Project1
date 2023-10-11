@@ -1,0 +1,4 @@
+icp:
+  max_iterations: 100
+  max_distance: 0.5
+  local_map_size_threshold: 100000
