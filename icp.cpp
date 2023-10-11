@@ -13,28 +13,27 @@
 pcl::PointCloud<pcl::PointXYZ>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 typedef pcl::KdTreeFLANN<pcl::PointXYZ> KDTree;
 typedef Eigen::Matrix4d TransformationMatrix;
-void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree, const TransformationMatrix& transformation) {
+void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree, const Eigen::Matrix4d& transformation) {
     for (const pcl::PointXYZ& src_point : *src_cloud) {
-        Eigen::Vector4f src_point_homogeneous;
-        src_point_homogeneous << src_point.x, src_point.y, src_point.z, 1.0;
-
-        // 应用变换矩阵，包括平移部分
-        Eigen::Vector4f transformed_point_homogeneous = transformation * src_point_homogeneous;
-
-        // 创建 pcl::PointXYZ 对象来表示变换后的点
+        Eigen::Vector4f src_point_transformed;
+        src_point_transformed << src_point.x, src_point.y, src_point.z, 1.0;
+        Eigen::Vector4f transformed_point = transformation * src_point_transformed;
+        
         pcl::PointXYZ transformed_src_point;
-        transformed_src_point.x = transformed_point_homogeneous[0];
-        transformed_src_point.y = transformed_point_homogeneous[1];
-        transformed_src_point.z = transformed_point_homogeneous[2];
+        transformed_src_point.x = transformed_point[0];
+        transformed_src_point.y = transformed_point[1];
+        transformed_src_point.z = transformed_point[2];
 
         std::vector<int> indices(1);
         std::vector<float> distances(1);
 
+        // 使用 KD 树查找最近邻点的索引
         kdtree.nearestKSearch(transformed_src_point, 1, indices, distances);
 
         correspondences.push_back(indices[0]);
     }
 }
+
 
 
 // 计算旋转矩阵和平移向量
