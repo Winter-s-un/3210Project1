@@ -10,7 +10,7 @@
 #include <vector>
 #include <cmath>
 
-
+pcl::PointCloud<pcl::PointXYZ>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 typedef pcl::KdTreeFLANN<pcl::PointXYZ> KDTree;
 typedef Eigen::Matrix4d TransformationMatrix;
 void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree, const TransformationMatrix& transformation) {
