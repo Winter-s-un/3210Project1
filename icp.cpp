@@ -13,92 +13,111 @@
 
 typedef pcl::KdTreeFLANN<pcl::PointXYZ> KDTree;
 
-void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree) {
-    for (const pcl::PointXYZ& src_point : *src_cloud) {
+void findCorrespondences(const PointCloud::Ptr src_cloud, const PointCloud::Ptr tar_cloud, std::vector<int>& correspondences, pcl::KdTreeFLANN<PointType>& kdtree) {
+    for (const PointType& src_point : *src_cloud) {
         std::vector<int> indices(1);
         std::vector<float> distances(1);
-        kdtree.nearestKSearch(src_point, 1, indices, distances);
+
+        PointType src_point_xy;
+        src_point_xy.x = src_point.x;
+        src_point_xy.y = src_point.y;
+        src_point_xy.z = 0.0;  // Ignore the Z coordinate
+
+        // Use KD tree to find the index of the nearest neighbor point
+        kdtree.nearestKSearch(src_point_xy, 1, indices, distances);
+
+        // Add the index of the nearest neighbor to the correspondences array
         correspondences.push_back(indices[0]);
-         std::cout << "Source point: (" << src_point.x << ", " << src_point.y << ", " << src_point.z << ") ";
-        std::cout << "Target point: (" << tar_cloud->points[indices[0]].x << ", " << tar_cloud->points[indices[0]].y << ", " << tar_cloud->points[indices[0]].z << ")" << std::endl;
     }
 }
 
-typedef Eigen::Matrix4d TransformationMatrix;
+TransformationMatrix computeTransformation(const PointCloud::Ptr src_cloud, const PointCloud::Ptr tar_cloud, const std::vector<int>& correspondences) {
+    // Initialize transformation matrix
+    TransformationMatrix transformation = TransformationMatrix::Identity();
 
-// 改进计算平移向量的方法
-Eigen::Vector3d computeTranslation(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const std::vector<int>& correspondences) {
-    Eigen::Vector3d translation_vector = Eigen::Vector3d::Zero();
+    // Compute the number of corresponding points
+    size_t num_correspondences = correspondences.size();
 
-    for (size_t i = 0; i < correspondences.size(); ++i) {
-        pcl::PointXYZ src_point = src_cloud->points[i];
-        pcl::PointXYZ tar_point = tar_cloud->points[correspondences[i]];
-
-        translation_vector += tar_point.getVector3fMap() - src_point.getVector3fMap();
+    if (num_correspondences == 0) {
+        return transformation;
     }
-    translation_vector /= correspondences.size();
 
-    return translation_vector;
-}
+    // Compute the centroids of source and target point clouds
+    Eigen::Vector2d src_centroid(0, 0);
+    Eigen::Vector2d tar_centroid(0, 0);
 
-// 改进计算旋转矩阵的方法
-Eigen::Matrix4d computeTransformation(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const std::vector<int>& correspondences) {
-    // 计算平移向量
-    Eigen::Vector3d translation_vector = computeTranslation(src_cloud, tar_cloud, correspondences);
+    for (size_t i = 0; i < num_correspondences; ++i) {
+        const PointType& src_point = src_cloud->points[i];
+        const PointType& tar_point = tar_cloud->points[correspondences[i]];
 
-    // 计算旋转矩阵
-    Eigen::Matrix3d rotation_matrix = Eigen::Matrix3d::Identity(); // 初始化为单位矩阵
+        src_centroid.x() += src_point.x;
+        src_centroid.y() += src_point.y;
+        tar_centroid.x() += tar_point.x;
+        tar_centroid.y() += tar_point.y;
+    }
 
-    // 添加更多代码来计算旋转矩阵（例如SVD方法）
-    
-    // 构建变换矩阵
-    Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
-    transformation.block<3, 3>(0, 0) = rotation_matrix;
-    transformation.block(0, 3, 3, 1) = translation_vector;
+    src_centroid /= num_correspondences;
+    tar_centroid /= num_correspondences;
+
+    // Compute the covariance matrix
+    Eigen::Matrix2d covariance_matrix = Eigen::Matrix2d::Zero();
+
+    for (size_t i = 0; i < num_correspondences; ++i) {
+        PointType src_point = src_cloud->points[i];
+        PointType tar_point = tar_cloud->points[correspondences[i]];
+
+        src_point.x -= src_centroid.x();
+        src_point.y -= src_centroid.y();
+
+        tar_point.x -= tar_centroid.x();
+        tar_point.y -= tar_centroid.y();
+
+        covariance_matrix += src_point.getVector2fMap() * tar_point.getVector2fMap().transpose();
+    }
+
+    covariance_matrix /= num_correspondences;
+
+    // Compute the Singular Value Decomposition (SVD) to find rotation
+    Eigen::JacobiSVD<Eigen::Matrix2d> svd(covariance_matrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    Eigen::Matrix2d rotation_matrix = svd.matrixU() * svd.matrixV().transpose();
+
+    // Compute the translation vector
+    Eigen::Vector2d translation = tar_centroid - rotation_matrix * src_centroid;
+
+    // Fill in the transformation matrix
+    transformation.block(0, 0, 2, 2) = rotation_matrix;
+    transformation.block(0, 3, 2, 1) = translation;
 
     return transformation;
 }
 
-
-Eigen::Matrix4d icp_registration(PointCloud::Ptr src_cloud, PointCloud::Ptr tar_cloud, Eigen::Matrix4d init_guess) {
-    KDTree kdtree;
+TransformationMatrix icp_registration(const PointCloud::Ptr src_cloud, const PointCloud::Ptr tar_cloud, TransformationMatrix init_guess) {
+    pcl::KdTreeFLANN<PointType> kdtree;
     kdtree.setInputCloud(tar_cloud);
 
-    Eigen::Matrix4d transformation = init_guess;
-    int max_iterations = 50;
-    double transformation_epsilon = 1e-6;
+    TransformationMatrix transformation = init_guess;
+    int iteration = 0;
 
-    for (int iteration = 0; iteration < max_iterations; ++iteration) {
+    while (iteration < params::max_iterations) {
         std::vector<int> correspondences;
-        std::vector<float> distances;
+        findCorrespondences(src_cloud, tar_cloud, correspondences, kdtree);
 
-        for (const PointType& src_point : *src_cloud) {
-            PointType src_point_2d;
-            src_point_2d.x = src_point.x;
-            src_point_2d.y = src_point.y;
-            src_point_2d.z = 0.0;  // Ignore Z coordinate
+        // Compute the transformation matrix
+        TransformationMatrix delta_transformation = computeTransformation(src_cloud, tar_cloud, correspondences);
 
-            std::vector<int> indices(1);
-            kdtree.nearestKSearch(src_point_2d, 1, indices, distances);
-
-            correspondences.push_back(indices[0]);
-        }
-
-        pcl::registration::TransformationEstimationSVD<PointType, PointType> svd;
-        Eigen::Matrix4d delta_transformation;
-        svd.estimateRigidTransformation(*src_cloud, *tar_cloud, correspondences, delta_transformation);
-
+        // Update the transformation matrix
         transformation = delta_transformation * transformation;
 
-        double transformation_change = (delta_transformation - Eigen::Matrix4d::Identity()).norm();
+        // Calculate the change in the transformation matrix
+        double transformation_change = (delta_transformation - TransformationMatrix::Identity()).norm();
 
-        if (transformation_change < transformation_epsilon) {
+        // Convergence check: If the change in the transformation matrix is below a threshold, exit the iteration
+        if (transformation_change < 1e-6) {
             break;
         }
+
+        iteration++;
     }
 
     return transformation;
 }
-
-
-
