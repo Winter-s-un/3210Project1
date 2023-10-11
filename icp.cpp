@@ -13,15 +13,25 @@
 
 typedef pcl::KdTreeFLANN<pcl::PointXYZ> KDTree;
 
-void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree) {
+void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree, const TransformationMatrix& transformation) {
     for (const pcl::PointXYZ& src_point : *src_cloud) {
+        Eigen::Vector4f src_point_homogeneous;
+        src_point_homogeneous << src_point.x, src_point.y, src_point.z, 1.0;
+
+        // 应用变换矩阵，包括平移部分
+        Eigen::Vector4f transformed_point_homogeneous = transformation * src_point_homogeneous;
+
+        // 创建 pcl::PointXYZ 对象来表示变换后的点
+        pcl::PointXYZ transformed_src_point;
+        transformed_src_point.x = transformed_point_homogeneous[0];
+        transformed_src_point.y = transformed_point_homogeneous[1];
+        transformed_src_point.z = transformed_point_homogeneous[2];
+
         std::vector<int> indices(1);
         std::vector<float> distances(1);
 
-        // 使用KD树查找最近邻点的索引
-        kdtree.nearestKSearch(src_point, 1, indices, distances);
+        kdtree.nearestKSearch(transformed_src_point, 1, indices, distances);
 
-        // 添加最近邻点的索引到correspondences数组
         correspondences.push_back(indices[0]);
     }
 }
@@ -89,37 +99,24 @@ Eigen::Matrix4d icp_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, 
     pcl::PointCloud<pcl::PointXYZ> aligned_cloud;
     icp.align(aligned_cloud, init_guess.cast<float>());
 
-    Eigen::Matrix4d transformation = icp.getFinalTransformation().cast<double>();
-    return transformation;*/
-    Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
-    int iteration = 0;
-
     KDTree kdtree;
     kdtree.setInputCloud(tar_cloud);
 
+    Eigen::Matrix4d transformation = init_guess;
+    int iteration = 0;
+
     while (iteration < params::max_iterations) {
         std::vector<int> correspondences;
-        
-    
-        findCorrespondences(src_cloud, tar_cloud, correspondences, kdtree);
+        findCorrespondences(src_cloud, tar_cloud, correspondences, kdtree, transformation);
 
-        // 计算变换矩阵
         Eigen::Matrix4d delta_transformation = computeTransformation(src_cloud, tar_cloud, correspondences);
-
-        // 更新变换矩阵
         transformation = delta_transformation * transformation;
-        
-        // 计算变换矩阵的变化量
+
         double transformation_change = (delta_transformation - Eigen::Matrix4d::Identity()).norm();
 
-
-
-
-        // 收敛检查：如果变换矩阵的变化量小于收敛阈值，退出迭代
         if (transformation_change < 1e-6) {
             break;
         }
-
 
         iteration++;
     }
