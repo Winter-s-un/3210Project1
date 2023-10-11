@@ -45,28 +45,35 @@ std::vector<Eigen::Vector3d> computeMeanRemovedPoints(const pcl::PointCloud<pcl:
 
 // 使用SVD计算变换矩阵
 TransformationMatrix computeTransformation(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const std::vector<int>& correspondences) {
+    // 步骤1：计算均值移除后的点对列表
     std::vector<Eigen::Vector3d> mean_removed_points = computeMeanRemovedPoints(src_cloud, tar_cloud, correspondences);
 
-    Eigen::Matrix3d covariance_matrix = Eigen::Matrix3d::Zero();
-    Eigen::Vector3d translation_vector = Eigen::Vector3d::Zero();
-
+    // 步骤2：计算均值偏移
+    Eigen::Vector3d mean_offset = Eigen::Vector3d::Zero();
     for (const Eigen::Vector3d& point : mean_removed_points) {
-        covariance_matrix += point * point.transpose();
-        translation_vector += point;
+        mean_offset += point;
     }
+    mean_offset /= mean_removed_points.size();
 
+    // 步骤3：计算协方差矩阵
+    Eigen::Matrix3d covariance_matrix = Eigen::Matrix3d::Zero();
+    for (const Eigen::Vector3d& point : mean_removed_points) {
+        Eigen::Vector3d centered_point = point - mean_offset;
+        covariance_matrix += centered_point * centered_point.transpose();
+    }
     covariance_matrix /= mean_removed_points.size();
-    translation_vector /= mean_removed_points.size();
 
+    // 步骤4：SVD分解协方差矩阵
     Eigen::JacobiSVD<Eigen::Matrix3d> svd(covariance_matrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
     Eigen::Matrix3d rotation_matrix = svd.matrixU() * svd.matrixV().transpose();
 
+    // 步骤5：构建变换矩阵
     TransformationMatrix transformation = TransformationMatrix::Identity();
-    transformation.block(0, 0, 3, 3) = rotation_matrix;
-    transformation.block(0, 3, 3, 1) = translation_vector;
-
+    transformation.block<3, 3>(0, 0) = rotation_matrix;
+    transformation.block<3, 1>(0, 3) = mean_offset;
     return transformation;
 }
+
 
 Eigen::Matrix4d icp_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, Eigen::Matrix4d init_guess) {
     int iteration = 0;
