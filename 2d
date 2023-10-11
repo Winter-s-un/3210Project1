@@ -1,0 +1,54 @@
+// Compute the transformation matrix (including rotation and translation) while ignoring Z coordinate
+TransformationMatrix computeTransformation(const pcl::PointCloud<PointType>::Ptr src_cloud, const pcl::PointCloud<PointType>::Ptr tar_cloud, const std::vector<int>& correspondences) {
+    // Initialize transformation matrix
+    TransformationMatrix transformation = TransformationMatrix::Identity();
+
+    // Compute the number of corresponding points
+    size_t num_correspondences = correspondences.size();
+
+    if (num_correspondences == 0) {
+        return transformation;
+    }
+
+    // Compute the centroids of source and target point clouds (ignoring Z)
+    Eigen::Vector2d src_centroid(0, 0);
+    Eigen::Vector2d tar_centroid(0, 0);
+
+    for (size_t i = 0; i < num_correspondences; ++i) {
+        src_centroid.x() += src_cloud->points[i].x;
+        src_centroid.y() += src_cloud->points[i].y;
+        tar_centroid.x() += tar_cloud->points[correspondences[i]].x;
+        tar_centroid.y() += tar_cloud->points[correspondences[i]].y;
+    }
+
+    src_centroid /= num_correspondences;
+    tar_centroid /= num_correspondences;
+
+    // Compute the covariance matrix (ignoring Z)
+    Eigen::Matrix2d covariance_matrix = Eigen::Matrix2d::Zero();
+
+    for (size_t i = 0; i < num_correspondences; ++i) {
+        Eigen::Vector2d src_point, tar_point;
+        src_point.x() = src_cloud->points[i].x - src_centroid.x();
+        src_point.y() = src_cloud->points[i].y - src_centroid.y();
+        tar_point.x() = tar_cloud->points[correspondences[i]].x - tar_centroid.x();
+        tar_point.y() = tar_cloud->points[correspondences[i]].y - tar_centroid.y();
+
+        covariance_matrix += src_point * tar_point.transpose();
+    }
+
+    covariance_matrix /= num_correspondences;
+
+    // Compute the Singular Value Decomposition (SVD) to find rotation (ignoring Z)
+    Eigen::JacobiSVD<Eigen::Matrix2d> svd(covariance_matrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    Eigen::Matrix2d rotation_matrix = svd.matrixU() * svd.matrixV().transpose();
+
+    // Compute the translation vector (including Z)
+    Eigen::Vector3d translation(0, 0, tar_centroid.x() - rotation_matrix(0, 0) * src_centroid.x() - rotation_matrix(0, 1) * src_centroid.y());
+
+    // Fill in the transformation matrix
+    transformation.block(0, 0, 2, 2) = rotation_matrix;
+    transformation.block(0, 3, 2, 1) = translation;
+
+    return transformation;
+}
