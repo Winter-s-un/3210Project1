@@ -43,7 +43,6 @@ std::vector<Eigen::Vector3d> computeMeanRemovedPoints(const pcl::PointCloud<pcl:
     return mean_removed_points;
 }
 
-// 使用SVD计算变换矩阵
 TransformationMatrix computeTransformation(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const std::vector<int>& correspondences) {
     // 步骤1：计算均值移除后的点对列表
     std::vector<Eigen::Vector3d> mean_removed_points = computeMeanRemovedPoints(src_cloud, tar_cloud, correspondences);
