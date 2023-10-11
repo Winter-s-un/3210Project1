@@ -15,7 +15,7 @@
 typedef pcl::KdTreeFLANN<pcl::PointXYZ> KDTree;
 typedef Eigen::Matrix4d TransformationMatrix;
 
-void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree) {
+void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree，const TransformationMatrix& transformation) {
     for (const pcl::PointXYZ& src_point : *src_cloud) {
         Eigen::Vector4f transformed_point;
         transformed_point = transformation * src_point.getVector4fMap();
