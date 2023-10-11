@@ -24,6 +24,7 @@ void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::Poi
 
 typedef Eigen::Matrix4d TransformationMatrix;
 
+// Compute the transformation matrix (including rotation and translation)
 TransformationMatrix computeTransformation(const pcl::PointCloud<PointType>::Ptr src_cloud, const pcl::PointCloud<PointType>::Ptr tar_cloud, const std::vector<int>& correspondences) {
     // Compute the centroid of the source cloud
     Eigen::Vector3d src_centroid(0, 0, 0);
@@ -72,6 +73,7 @@ TransformationMatrix computeTransformation(const pcl::PointCloud<PointType>::Ptr
 
     return transformation;
 }
+
 
 Eigen::Matrix4d icp_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, Eigen::Matrix4d init_guess) {
     int iteration = 0;
