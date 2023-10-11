@@ -60,28 +60,42 @@ Eigen::Matrix4d computeTransformation(const pcl::PointCloud<pcl::PointXYZ>::Ptr 
 }
 
 
-Eigen::Matrix4d icp_registration(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, Eigen::Matrix4d init_guess) {
-    int iteration = 0;
+Eigen::Matrix4d icp_registration(PointCloud::Ptr src_cloud, PointCloud::Ptr tar_cloud, Eigen::Matrix4d init_guess) {
     KDTree kdtree;
     kdtree.setInputCloud(tar_cloud);
+
     Eigen::Matrix4d transformation = init_guess;
+    int max_iterations = 50;
+    double transformation_epsilon = 1e-6;
 
-    while (iteration < params::max_iterations) {
+    for (int iteration = 0; iteration < max_iterations; ++iteration) {
         std::vector<int> correspondences;
-        findCorrespondences(src_cloud, tar_cloud, correspondences, kdtree);
-        Eigen::Matrix4d delta_transformation = computeTransformation(src_cloud, tar_cloud, correspondences);
-        transformation = delta_transformation * transformation;
-        double transformation_change = (delta_transformation - Eigen::Matrix4d::Identity()).norm();
+        std::vector<float> distances;
 
-        if (transformation_change < 1e-6) {
-            break;
+        for (const PointType& src_point : *src_cloud) {
+            PointType src_point_2d;
+            src_point_2d.x = src_point.x;
+            src_point_2d.y = src_point.y;
+            src_point_2d.z = 0.0;  // Ignore Z coordinate
+
+            std::vector<int> indices(1);
+            kdtree.nearestKSearch(src_point_2d, 1, indices, distances);
+
+            correspondences.push_back(indices[0]);
         }
 
-        iteration++;
-    }
+        pcl::registration::TransformationEstimationSVD<PointType, PointType> svd;
+        Eigen::Matrix4d delta_transformation;
+        svd.estimateRigidTransformation(*src_cloud, *tar_cloud, correspondences, delta_transformation);
 
-    std::cout << "Final Transformation:" << std::endl;
-    std::cout << transformation << std::endl;
+        transformation = delta_transformation * transformation;
+
+        double transformation_change = (delta_transformation - Eigen::Matrix4d::Identity()).norm();
+
+        if (transformation_change < transformation_epsilon) {
+            break;
+        }
+    }
 
     return transformation;
 }
