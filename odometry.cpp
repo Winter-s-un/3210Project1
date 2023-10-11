@@ -71,11 +71,13 @@ void OdomICP::run() {
 }
 
 void OdomICP::cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
-    cloudQueueMutex.lock();
+    pcl::PointCloud<pcl::PointXYZ>::Ptr keyframe_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    *keyframe_cloud = parseCloud(cloud_msg); // Initialize the keyframe with the first scan
+    /*cloudQueueMutex.lock();
     std_msgs::Header cloudHeader = laserCloudMsg->header;
     cloudHeader.stamp = ros::Time::now();
     cloudQueue.push(std::make_pair(cloudHeader, laserCloudMsg));
-    cloudQueueMutex.unlock();
+    cloudQueueMutex.unlock();*/
 }
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr OdomICP::parseCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
@@ -85,6 +87,22 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr OdomICP::parseCloud(const sensor_msgs::Point
     std::vector<int> indices;
     pcl::removeNaNFromPointCloud(*cloudTmp, *cloudTmp, indices);
     return cloudTmp;
+}
+
+void OdomICP::update_map() {
+  // Update the local map.
+  pcl::transformPointCloud(*laserTransformed, *laserTransformed, Twb.cast<float>());
+  update_local_map(local_map, laserTransformed);
+
+  // Check if the local map needs to be merged with the global map.
+  if (local_map->size() > local_map_size_threshold) {
+    // Merge the local map with the global map.
+    *map += *local_map;
+
+    // Clear the local map.
+    local_map->width = 0;
+    local_map->height = 0;
+  }
 }
 
 void OdomICP::publishResult() {
