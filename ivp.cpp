@@ -13,7 +13,7 @@
 
 
 typedef pcl::KdTreeFLANN<pcl::PointXYZ> KDTree;
-
+//use kdtree to find nearest point
 void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, std::vector<int>& correspondences, KDTree& kdtree) {
     for (const pcl::PointXYZ& src_point : *src_cloud) {
         std::vector<int> indices(1);
@@ -24,10 +24,10 @@ void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::Poi
 }
 
 
-// 使用Eigen库的Matrix4d定义变换矩阵
+
 typedef Eigen::Matrix4d TransformationMatrix;
 
-// 计算均值移除后的点对列表
+
 std::vector<Eigen::Vector3d> computeMeanRemovedPoints(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const std::vector<int>& correspondences) {
     std::vector<Eigen::Vector3d> mean_removed_points;
 
@@ -46,23 +46,23 @@ std::vector<Eigen::Vector3d> computeMeanRemovedPoints(const pcl::PointCloud<pcl:
     return mean_removed_points;
 }
 
-// 使用SVD计算变换矩阵
+// use svd to cal the transformation
 TransformationMatrix computeTransformation(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const std::vector<int>& correspondences) {
-    // 步骤1：计算均值移除后的点对列表
+
     std::vector<Eigen::Vector3d> mean_removed_points = computeMeanRemovedPoints(src_cloud, tar_cloud, correspondences);
 
-    // 步骤2：计算协方差矩阵
+
     Eigen::Matrix3d covariance_matrix = Eigen::Matrix3d::Zero();
     for (const Eigen::Vector3d& point : mean_removed_points) {
         covariance_matrix += point * point.transpose();
     }
     covariance_matrix /= mean_removed_points.size();
 
-    // 步骤3：SVD分解协方差矩阵
+
     Eigen::JacobiSVD<Eigen::Matrix3d> svd(covariance_matrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
     Eigen::Matrix3d rotation_matrix = svd.matrixU() * svd.matrixV().transpose();
 
-    // 步骤4：构建变换矩阵
+
     TransformationMatrix transformation = TransformationMatrix::Identity();
     transformation.block(0, 0, 3, 3) = rotation_matrix;
 
