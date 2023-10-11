@@ -37,9 +37,6 @@ void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::Poi
 }
 
 
-// 定义点云变换矩阵
-typedef Eigen::Matrix4d TransformationMatrix;
-
 // 计算旋转矩阵和平移向量
 void computeRotationAndTranslation(const Eigen::Matrix4d& transformation, Eigen::Matrix3d& rotation, Eigen::Vector3d& translation) {
     rotation = transformation.block<3, 3>(0, 0);
@@ -118,8 +115,7 @@ Eigen::Vector3d computeTranslation(const std::vector<Eigen::Vector3d>& mean_remo
 
 // 使用ICP算法计算变换矩阵（包括旋转和平移）
 TransformationMatrix icp_registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr tar_cloud, const TransformationMatrix& init_guess) {
-    int iteration = 0;
-
+       int iteration = 0;
     KDTree kdtree;
     kdtree.setInputCloud(tar_cloud);
 
