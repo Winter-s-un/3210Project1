@@ -19,6 +19,8 @@ void findCorrespondences(pcl::PointCloud<pcl::PointXYZ>::Ptr src_cloud, pcl::Poi
         std::vector<float> distances(1);
         kdtree.nearestKSearch(src_point, 1, indices, distances);
         correspondences.push_back(indices[0]);
+         std::cout << "Source point: (" << src_point.x << ", " << src_point.y << ", " << src_point.z << ") ";
+        std::cout << "Target point: (" << tar_cloud->points[indices[0]].x << ", " << tar_cloud->points[indices[0]].y << ", " << tar_cloud->points[indices[0]].z << ")" << std::endl;
     }
 }
 
